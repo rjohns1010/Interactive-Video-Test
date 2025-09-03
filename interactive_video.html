@@ -1,0 +1,162 @@
+<style>
+  .iv-wrapper{max-width:900px;margin:8px auto;font-family:Arial,Helvetica,sans-serif}
+  .iv-popup{display:none;border:1px solid #ccc;padding:14px;background:#fff;margin-top:10px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  .iv-qtitle{margin:0 0 8px 0;font-weight:600}
+  .iv-btn{display:inline-block;margin:6px 6px 0 0;padding:8px 12px;border-radius:6px;border:1px solid #555;background:#f6f6f6;cursor:pointer}
+  .iv-btn.correct{background:#e6ffef;border-color:#1b8f4a}
+  .iv-btn.wrong{background:#ffecec;border-color:#c93030}
+  .iv-small{font-size:0.9em;color:#333;margin-top:8px}
+  .iv-hotspot-wrap{position:relative;display:inline-block;max-width:100%}
+  .iv-hotspot{position:absolute;width:28px;height:28px;border-radius:50%;background:rgba(255,0,0,0.15);border:2px solid rgba(255,0,0,0.45);transform:translate(-50%,-50%);cursor:pointer}
+</style>
+
+<div class="iv-wrapper">
+  <div id="ytplayer" style="max-width:100%;"></div>
+  <div id="iv-popup" class="iv-popup" role="region" aria-live="polite" aria-atomic="true"></div>
+</div>
+
+<script>
+const YT_VIDEO_ID = "6GLDlBxZTUQ";
+
+const triggers = [
+  {id:'q1', time:10, type:'mcq', question:'Which chamber pumps blood to the lungs?', options:['Left ventricle','Right ventricle','Left atrium','Right atrium'], correctIndex:1},
+  {id:'q2', time:25, type:'tf', question:'True or False: Normal resting adult heart rate <60 bpm.', correct:false},
+  {id:'q3', time:40, type:'short', question:'One major modifiable risk factor for PAD (one word).', correctAnswers:['smoking','diabetes','hypertension','hyperlipidemia']},
+  {id:'q4', time:55, type:'numeric', question:'If stroke volume=70 mL and HR=75 bpm, what is cardiac output in L/min? Round to 2 decimals.', correctValue:5.25, tolerance:0.25},
+  {id:'q5', time:70, type:'multiselect', question:'Select signs commonly seen with left-sided heart failure (choose all that apply):', options:['Pulmonary edema','Peripheral edema','Jugular venous distension','S3 gallop'], correctIndices:[0,3]},
+  {id:'q6', time:85, type:'match', question:'Match ECG lead to primary anatomical view:', pairs:[
+      {prompt:'Lead II', options:['Inferior','Anterior','Lateral'], correctIndex:0},
+      {prompt:'V1', options:['Anterior','Inferior','Lateral'], correctIndex:1},
+      {prompt:'Lead I', options:['Inferior','Anterior','Lateral'], correctIndex:2}
+  ]},
+  {id:'q7', time:100, type:'hotspot', question:'Click the left pleural effusion on the chest x-ray:', image:'https://i.imgur.com/3Z9a9t8.jpg', hotspots:[
+      {xPct:60, yPct:40, label:"Upper right lung", correct:false},
+      {xPct:70, yPct:65, label:"Left costophrenic angle", correct:true},
+      {xPct:40, yPct:50, label:"Right costophrenic angle", correct:false}
+  ]},
+  {id:'q8', time:115, type:'reflection', question:'In one sentence, which concept from the video do you want to review further?'}
+];
+
+(function(){
+  let tag = document.createElement('script');
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+
+  let player, active=false;
+  window.onYouTubeIframeAPIReady = function() {
+    player = new YT.Player('ytplayer', {
+      height: '390',
+      width: '640',
+      videoId: YT_VIDEO_ID,
+      playerVars: { 'controls': 1, 'rel': 0, 'enablejsapi': 1, 'origin': location.origin },
+      events: { 'onReady': ()=>{ setInterval(checkTriggers, 400); } }
+    });
+  };
+
+  function checkTriggers(){
+    if(!player || active) return;
+    const t = player.getCurrentTime();
+    for(const trig of triggers){
+      if(!trig.shown && t >= trig.time - 0.4){
+        player.pauseVideo();
+        active=true;
+        showPopup(trig);
+        break;
+      }
+    }
+  }
+
+  const popup = document.getElementById('iv-popup');
+
+  function showPopup(trig){
+    popup.innerHTML=''; popup.style.display='block';
+    const title=document.createElement('div'); title.className='iv-qtitle'; title.innerText=trig.question; popup.appendChild(title);
+    const content=document.createElement('div'); popup.appendChild(content);
+
+    function finish(){ trig.shown=true; popup.style.display='none'; active=false; player.playVideo(); }
+
+    if(trig.type==='mcq' || trig.type==='tf'){
+      const opts = (trig.type==='tf') ? ['True','False'] : trig.options;
+      opts.forEach((opt,i)=>{
+        const b=document.createElement('button'); b.className='iv-btn'; b.innerText=opt;
+        b.onclick=()=>{ 
+          const correctIndex = (trig.type==='tf') ? (trig.correct?0:1) : trig.correctIndex;
+          if(i===correctIndex){ b.classList.add('correct'); setTimeout(finish,900); } 
+          else { b.classList.add('wrong'); content.appendChild(Object.assign(document.createElement('div'),{className:'iv-small', innerText:'❌ Not correct — try again.'})); }
+        };
+        content.appendChild(b);
+      });
+    } 
+    else if(trig.type==='short'){
+      const inp=document.createElement('input'); inp.type='text'; inp.style.width='70%';
+      const btn=document.createElement('button'); btn.className='iv-btn'; btn.innerText='Submit';
+      btn.onclick=()=>{ 
+        const val=inp.value.trim().toLowerCase();
+        if((trig.correctAnswers||[]).some(a=>a.toLowerCase()===val)){ setTimeout(finish,900); } 
+        else { content.appendChild(Object.assign(document.createElement('div'),{className:'iv-small', innerText:'❌ Try again'})); }
+      };
+      content.appendChild(inp); content.appendChild(btn);
+    } 
+    else if(trig.type==='numeric'){
+      const inp=document.createElement('input'); inp.type='number'; inp.step='any';
+      const btn=document.createElement('button'); btn.className='iv-btn'; btn.innerText='Check';
+      btn.onclick=()=>{ 
+        const val=parseFloat(inp.value); 
+        if(Math.abs(val-(trig.correctValue||0)) <= (trig.tolerance||0.1)){ setTimeout(finish,900); } 
+        else { content.appendChild(Object.assign(document.createElement('div'),{className:'iv-small', innerText:`❌ Not within tolerance (≈ ${trig.correctValue})`})); }
+      };
+      content.appendChild(inp); content.appendChild(btn);
+    } 
+    else if(trig.type==='multiselect'){
+      trig.options.forEach((opt,i)=>{
+        const cb=document.createElement('input'); cb.type='checkbox'; cb.id=trig.id+'_cb'+i;
+        const lbl=document.createElement('label'); lbl.htmlFor=cb.id; lbl.style.marginRight='12px';
+        lbl.appendChild(cb); lbl.appendChild(document.createTextNode(' '+opt)); content.appendChild(lbl);
+      });
+      const btn=document.createElement('button'); btn.className='iv-btn'; btn.innerText='Submit';
+      btn.onclick=()=>{
+        const sel=[];
+        trig.options.forEach((o,i)=>{ if(document.getElementById(trig.id+'_cb'+i).checked) sel.push(i); });
+        const corr=(trig.correctIndices||[]).slice().sort().join(',');
+        const selStr=sel.slice().sort().join(',');
+        if(corr===selStr){ setTimeout(finish,900); } 
+        else { content.appendChild(Object.assign(document.createElement('div'),{className:'iv-small', innerText:'❌ Not correct — try again.'})); }
+      };
+      content.appendChild(btn);
+    } 
+    else if(trig.type==='match'){
+      trig.pairs.forEach((p, idx)=>{
+        const row=document.createElement('div'); row.style.marginBottom='8px';
+        const lbl=document.createElement('span'); lbl.innerText=p.prompt+' — ';
+        const sel=document.createElement('select'); p.options.forEach((o,i)=> sel.add(new Option(o,i))); sel.id=trig.id+'_sel_'+idx;
+        row.appendChild(lbl); row.appendChild(sel); content.appendChild(row);
+      });
+      const btn=document.createElement('button'); btn.className='iv-btn'; btn.innerText='Check matches';
+      btn.onclick=()=>{
+        let allGood=true;
+        trig.pairs.forEach((p,idx)=>{ if(parseInt(document.getElementById(trig.id+'_sel_'+idx).value)!==p.correctIndex) allGood=false; });
+        if(allGood){ setTimeout(finish,900); } 
+        else { content.appendChild(Object.assign(document.createElement('div'),{className:'iv-small', innerText:'❌ At least one mismatch — try again.'})); }
+      };
+      content.appendChild(btn);
+    } 
+    else if(trig.type==='hotspot'){
+      const wrap=document.createElement('div'); wrap.className='iv-hotspot-wrap';
+      const img=document.createElement('img'); img.src=trig.image; img.style.maxWidth='100%'; img.alt=trig.question||'Interactive image';
+      wrap.appendChild(img);
+      trig.hotspots.forEach((h,i)=>{
+        const dot=document.createElement('div'); dot.className='iv-hotspot'; dot.style.left=h.xPct+'%'; dot.style.top=h.yPct+'%'; dot.title=h.label||('spot '+(i+1));
+        dot.onclick=()=>{ if(h.correct){ dot.classList.add('correct'); setTimeout(finish,900); } else { dot.classList.add('wrong'); content.appendChild(Object.assign(document.createElement('div'),{className:'iv-small', innerText:'❌ Not correct'})); } };
+        wrap.appendChild(dot);
+      });
+      content.appendChild(wrap);
+    } 
+    else if(trig.type==='reflection'){
+      const ta=document.createElement('textarea'); ta.rows=3; ta.style.width='96%';
+      const btn=document.createElement('button'); btn.className='iv-btn'; btn.innerText='Save & Continue';
+      btn.onclick=()=>{ setTimeout(finish,900); };
+      content.appendChild(ta); content.appendChild(btn);
+    }
+  }
+})();
+</script>
